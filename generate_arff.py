@@ -82,7 +82,7 @@ def generate_arff_file(feature_vectors, all_tokens, out_path):
         # Header info
         f.write("@RELATION institutions\n")
         for i in range(len(all_tokens)):
-            f.write("@ATTRIBUTE token_{} INTEGER\n".format(i))
+            f.write("@ATTRIBUTE token_{} integer\n".format(i))
 
         ### SPECIFY ADDITIONAL FEATURES HERE ###
         # For example: f.write("@ATTRIBUTE custom_1 REAL\n")

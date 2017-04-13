@@ -6,19 +6,15 @@
 # 4) attended
 # 5) studied at
 
+from __future__ import division
 import re
-import pandas as pd
-
-from sklearn.datasets import load_files
-from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.svm import LinearSVC
 
 if __name__ == "__main__":
     input_file = 'test.tsv'
-    output_file = 'output_manual_extractor.tsv'
-    output = open(output_file, 'w')
-
-    test_model_file = load_files(input_file, encoding='latin-1')
+    true_positives = 0
+    true_negatives = 0
+    false_positives = 0
+    false_negatives = 0
 
     with open(input_file) as inputted_file:
         lines = inputted_file.read().splitlines()  # read input file
@@ -26,19 +22,27 @@ if __name__ == "__main__":
     for line in lines:
         sentences = line.split('\t')
         sentence = sentences[2]
+        gold_standard_result = sentences[-1]
 
         match = re.search(r'\beducated at\b', sentence, flags=re.IGNORECASE) or \
             re.search(r'\bgraduated from\b', sentence, flags=re.IGNORECASE) or \
             re.search(r'\bmatriculated at\b', sentence, flags=re.IGNORECASE) or \
             re.search(r'\battended\b', sentence, flags=re.IGNORECASE) or \
             re.search(r'\bstudied at\b', sentence, flags=re.IGNORECASE)
+
         if match:
-            output.write("%s\t%s\t%s\t%s\t%s\n" % (sentences[0], sentences[1], sentences[2], sentences[3], 'yes'))
+            if gold_standard_result == 'yes':
+                true_positives += 1
+            else:
+                false_positives += 1
         else:
-            output.write("%s\t%s\t%s\t%s\t%s\n" % (sentences[0], sentences[1], sentences[2], sentences[3], 'no'))
-    output.close()
+            if gold_standard_result == 'no':
+                true_negatives += 1
+            else:
+                false_negatives += 1
 
-    test_generated_file = load_files(output_file, encoding='latin-1')
-
-    vectors = CountVectorizer.fit_transform(test_model_file.data)
-    print vectors.shape
+    print true_positives, ", ", true_negatives, ", ", false_positives, ", ", false_negatives
+    precision = true_positives / (true_positives + false_positives)
+    recall = true_positives / (true_positives + false_negatives)
+    f1_score = 2 * ((precision * recall) / (precision + recall))
+    print precision, recall, f1_score
