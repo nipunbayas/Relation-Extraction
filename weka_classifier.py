@@ -9,7 +9,7 @@ from weka.classifiers import Classifier
 #data.class_is_last()
 
 #print(data)
-out_path = 'bow_model.txt'
+#out_path = 'bow_model.txt'
 cls = Classifier(name='weka.classifiers.functions.LibSVM', ckargs={'-C':1})
 #cls = Classifier(classname="weka.classifiers.trees.J48", options=["-C", "0.3"])
 #cls.build_classifier(data)
@@ -23,7 +23,7 @@ cls.train('train.arff')
 predictions = cls.predict('test.arff', verbose=1)
 
 for result in predictions:
-	pass
+	print result.predicted, result.actual, result.probability
 #	print "Result is: ", result
 
 #jvm.stop()
