@@ -1,8 +1,61 @@
+from nltk.tokenize import sent_tokenize
+from nltk.parse.stanford import StanfordDependencyParser
+
+import re
+
 TEST_DATA_PATH = "test.tsv"
 TRAIN_DATA_PATH = "train.tsv"
+BROWN_CLUSTER_FILE = "brown_cluster_paths"
+# Use extractor type as either - 'manual', 'normal', 'nltk_tokenizer', 'brown', 'dependency_features' or 'kitchen_sink'
+extractor = 'brown'
+cluster_prefix_length = 5
 
 
-def parse_data(train_data, test_data):
+def manual_relation_extractor():
+    true_positives = 0
+    true_negatives = 0
+    false_positives = 0
+    false_negatives = 0
+
+    with open(TEST_DATA_PATH) as inputted_file:
+        lines = inputted_file.read().splitlines()  # read input file
+
+    for line in lines:
+        sentences = line.split('\t')
+        sentence = sentences[2]
+        gold_standard_result = sentences[-1]
+
+        match = re.search(r'\beducated at\b', sentence, flags=re.IGNORECASE) or \
+                re.search(r'\bgraduated from\b', sentence, flags=re.IGNORECASE) or \
+                re.search(r'\bmatriculated at\b', sentence, flags=re.IGNORECASE) or \
+                re.search(r'\battended\b', sentence, flags=re.IGNORECASE) or \
+                re.search(r'\bstudied at\b', sentence, flags=re.IGNORECASE)
+
+        if match:
+            if gold_standard_result == 'yes':
+                true_positives += 1
+            else:
+                false_positives += 1
+        else:
+            if gold_standard_result == 'no':
+                true_negatives += 1
+            else:
+                false_negatives += 1
+
+
+def get_brown_clusters():
+    brown_clusters = {}
+    with open(BROWN_CLUSTER_FILE) as inputted_file:
+        data_lines = inputted_file.read().splitlines()
+
+    for line in data_lines:
+        word_cluster = line.split('\t')
+        brown_clusters[word_cluster[1]] = word_cluster[0]
+
+    return brown_clusters
+
+
+def parse_data(train_data, test_data, extractor):
     """
     Input: path to the data file
     Output: (1) a list of tuples, one for each instance of the data, and
@@ -18,24 +71,43 @@ def parse_data(train_data, test_data):
     """
     all_tokens = []
     data = []
-    for fp in [train_data, test_data]:
+    # for fp in [train_data, test_data]:
+    for fp in [test_data]:
         with open(fp) as f:
             for line in f:
+            	line = unicode(line, errors='replace')
                 institution, person, snippet, intermediate_text, judgment = line.split("\t")
                 judgment = judgment.strip()
 
                 # Build up a list of unique tokens that occur in the intermediate text
                 # This is needed to create BOW feature vectors
-                tokens = intermediate_text.split()
+                if extractor is 'normal':
+                    tokens = intermediate_text.split()
+                # Using the NTLK Sentence Tokenizer
+                elif extractor is 'nltk_tokenizer':
+                    tokens = sent_tokenize(intermediate_text)
+                # Using Brown Clusters
+                elif extractor is 'brown':
+                    tokens = []
+                    brown_cluster_dict = get_brown_clusters()
+                    words = intermediate_text.split()
+                    for word in words:
+                        if word in brown_cluster_dict:
+                            tokens.append(brown_cluster_dict[word][0:cluster_prefix_length])
+                # Using Stanford Dependency Parser
+                elif extractor is 'dependency_features':
+                    tokens = StanfordDependencyParser.raw_parse(intermediate_text)
+
                 for t in tokens:
-                    t = t.lower()
+                    if extractor is not 'brown':
+                        t = t.lower()
                     if t not in all_tokens:
                         all_tokens.append(t)
                 data.append((person, institution, judgment, snippet, intermediate_text))
     return data, all_tokens
 
 
-def create_feature_vectors(data, all_tokens):
+def create_feature_vectors(data, all_tokens, extractor):
     """
     Input: (1) The parsed data from parse_data()
              (2) a list of all unique tokens found in the intermediate text
@@ -54,9 +126,29 @@ def create_feature_vectors(data, all_tokens):
         # in the intermediate text
         feature_vector = [0 for t in all_tokens]
         intermediate_text = instance[4]
-        tokens = intermediate_text.split()
+
+        if extractor is 'normal':
+            tokens = intermediate_text.split()
+        # Using NLTK Sentence Tokenizer
+        elif extractor is 'nltk_tokenizer':
+            tokens = sent_tokenize(intermediate_text)
+        # Using Brown clusters
+        elif extractor is 'brown':
+            tokens = []
+            brown_cluster_dict = get_brown_clusters()
+            words = intermediate_text.split()
+            for word in words:
+                if word in brown_cluster_dict:
+                    tokens.append(brown_cluster_dict[word][0:cluster_prefix_length])
+        # Using Stanford Dependency Parser
+        elif extractor is 'dependency_features':
+            tokens = StanfordDependencyParser.raw_parse(intermediate_text)
+
         for token in tokens:
-            index = all_tokens.index(token.lower())
+            if extractor is 'brown':
+                index = all_tokens.index(token)
+            else:
+                index = all_tokens.index(token.lower())
             feature_vector[index] += 1
 
         ### ADD ADDITIONAL FEATURES HERE ###
@@ -69,7 +161,7 @@ def create_feature_vectors(data, all_tokens):
     return feature_vectors
 
 
-def generate_arff_file(feature_vectors, all_tokens, out_path):
+def generate_arff_file(feature_vectors, all_tokens, out_path, extractor):
     """
     Input: (1) A list of all feature vectors for the data
              (2) A list of all unique tokens that occurred in the intermediate text
@@ -82,7 +174,10 @@ def generate_arff_file(feature_vectors, all_tokens, out_path):
         # Header info
         f.write("@RELATION institutions\n")
         for i in range(len(all_tokens)):
-            f.write("@ATTRIBUTE token_{} integer\n".format(i))
+            if extractor is 'brown':
+                f.write("@ATTRIBUTE cluster_{} integer\n".format(i))
+            else:
+                f.write("@ATTRIBUTE token_{} integer\n".format(i))
 
         ### SPECIFY ADDITIONAL FEATURES HERE ###
         # For example: f.write("@ATTRIBUTE custom_1 REAL\n")
@@ -102,7 +197,7 @@ def generate_arff_file(feature_vectors, all_tokens, out_path):
             f.write("{" + entry + "}\n")
 
 if __name__ == "__main__":
-    data, all_tokens = parse_data(TRAIN_DATA_PATH, TEST_DATA_PATH)
-    feature_vectors = create_feature_vectors(data, all_tokens)
-    generate_arff_file(feature_vectors[:6000], all_tokens, "train.arff")
-    generate_arff_file(feature_vectors[6000:], all_tokens, "test.arff")
+    data, all_tokens = parse_data(TRAIN_DATA_PATH, TEST_DATA_PATH, extractor)
+    feature_vectors = create_feature_vectors(data, all_tokens, extractor)
+    generate_arff_file(feature_vectors[:60], all_tokens, "train.arff", extractor)
+    generate_arff_file(feature_vectors[60:], all_tokens, "test.arff", extractor)
