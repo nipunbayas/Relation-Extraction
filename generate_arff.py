@@ -2,12 +2,16 @@ from nltk.tokenize import sent_tokenize
 from nltk.parse.stanford import StanfordDependencyParser
 
 import re
+import os
+
+os.environ['STANFORD_PARSER'] = '/home/nipun/nltk_data'
+os.environ['STANFORD_MODELS'] = '/home/nipun/nltk_data'
 
 TEST_DATA_PATH = "test.tsv"
 TRAIN_DATA_PATH = "train.tsv"
 BROWN_CLUSTER_FILE = "brown_cluster_paths"
 # Use extractor type as either - 'manual', 'normal', 'nltk_tokenizer', 'brown', 'dependency_features' or 'kitchen_sink'
-extractor = 'brown'
+extractor = 'dependency_features'
 cluster_prefix_length = 5
 
 
@@ -71,11 +75,9 @@ def parse_data(train_data, test_data, extractor):
     """
     all_tokens = []
     data = []
-    # for fp in [train_data, test_data]:
-    for fp in [test_data]:
+    for fp in [train_data, test_data]:
         with open(fp) as f:
             for line in f:
-            	line = unicode(line, errors='replace')
                 institution, person, snippet, intermediate_text, judgment = line.split("\t")
                 judgment = judgment.strip()
 
@@ -85,6 +87,7 @@ def parse_data(train_data, test_data, extractor):
                     tokens = intermediate_text.split()
                 # Using the NTLK Sentence Tokenizer
                 elif extractor is 'nltk_tokenizer':
+                    intermediate_text = unicode(intermediate_text, errors='replace')
                     tokens = sent_tokenize(intermediate_text)
                 # Using Brown Clusters
                 elif extractor is 'brown':
@@ -96,7 +99,16 @@ def parse_data(train_data, test_data, extractor):
                             tokens.append(brown_cluster_dict[word][0:cluster_prefix_length])
                 # Using Stanford Dependency Parser
                 elif extractor is 'dependency_features':
-                    tokens = StanfordDependencyParser.raw_parse(intermediate_text)
+                    intermediate_text = unicode(intermediate_text, errors='replace')
+                    dep_parser = StanfordDependencyParser(model_path='/home/nipun/nltk_data/englishPCFG.ser.gz', java_options = '-mx4096m')
+                    tokens = dep_parser.raw_parse(intermediate_text)
+                    for t in tokens:
+                        print t.tree()
+                        print " "
+                """ To generate CoNLL file, type the commands:
+                      java -mx150m -cp "stanford-parser-full-2016-10-31/*:" edu.stanford.nlp.parser.lexparser.LexicalizedParser -outputFormat "penn" /home/nipun/nltk_data/englishPCFG.ser.gz intermediate_text >testsent.tree
+
+java -mx150m -cp "stanford-parser-full-2016-10-31/*:" edu.stanford.nlp.trees.EnglishGrammaticalStructure -treeFile testsent.tree -conllx """
 
                 for t in tokens:
                     if extractor is not 'brown':
@@ -142,8 +154,10 @@ def create_feature_vectors(data, all_tokens, extractor):
                     tokens.append(brown_cluster_dict[word][0:cluster_prefix_length])
         # Using Stanford Dependency Parser
         elif extractor is 'dependency_features':
-            tokens = StanfordDependencyParser.raw_parse(intermediate_text)
-
+            dep_parser = StanfordDependencyParser(model_path='/home/nipun/nltk_data/englishPCFG.ser.gz', java_options = '-mx20000m')
+            tokens = dep_parser.raw_parse(intermediate_text)
+            
+        
         for token in tokens:
             if extractor is 'brown':
                 index = all_tokens.index(token)
@@ -199,5 +213,5 @@ def generate_arff_file(feature_vectors, all_tokens, out_path, extractor):
 if __name__ == "__main__":
     data, all_tokens = parse_data(TRAIN_DATA_PATH, TEST_DATA_PATH, extractor)
     feature_vectors = create_feature_vectors(data, all_tokens, extractor)
-    generate_arff_file(feature_vectors[:60], all_tokens, "train.arff", extractor)
-    generate_arff_file(feature_vectors[60:], all_tokens, "test.arff", extractor)
+    generate_arff_file(feature_vectors[:6000], all_tokens, "train.arff", extractor)
+    generate_arff_file(feature_vectors[6000:], all_tokens, "test.arff", extractor)
