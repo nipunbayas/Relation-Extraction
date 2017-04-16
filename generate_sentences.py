@@ -13,12 +13,13 @@ if __name__ == "__main__":
 
 	for line in train_data_lines:
 		sentences = line.split('\t')
-		sentence = sentences[2]
-		write_output.write("%s\n" % sentence)
+		sentence = sentences[3]
+		words = sentence.split()
+		write_output.write("%s.\n" % sentence)
 		
 	for line in test_data_lines:
 		sentences = line.split('\t')
-		sentence = sentences[2]
-		write_output.write("%s\n" % sentence)
+		sentence = sentences[3]
+		write_output.write("%s.\n" % sentence)
 		
 	write_output.close()

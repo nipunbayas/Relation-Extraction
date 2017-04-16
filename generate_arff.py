@@ -1,18 +1,26 @@
 from nltk.tokenize import sent_tokenize
 from nltk.parse.stanford import StanfordDependencyParser
 
-import re
 import os
 
 os.environ['STANFORD_PARSER'] = '/home/nipun/nltk_data'
 os.environ['STANFORD_MODELS'] = '/home/nipun/nltk_data'
 
-TEST_DATA_PATH = "test.tsv"
-TRAIN_DATA_PATH = "train.tsv"
-BROWN_CLUSTER_FILE = "brown_cluster_paths"
-# Use extractor type as either - 'manual', 'normal', 'nltk_tokenizer', 'brown', 'dependency_features' or 'kitchen_sink'
-extractor = 'dependency_features'
-cluster_prefix_length = 5
+# os.environ['STANFORD_PARSER'] = 'C:/Users/Nipun/Desktop/MS/Sem2/Natural_Language_Processing/Assignments/Assignment3/stanford-parser-full-2016-10-31'
+# os.environ['STANFORD_MODELS'] = 'C:/Users/Nipun/Desktop/MS/Sem2/Natural_Language_Processing/Assignments/Assignment3/stanford-parser-full-2016-10-31'
+
+TEST_DATA_PATH = 'test.tsv'
+TRAIN_DATA_PATH = 'train.tsv'
+BROWN_CLUSTER_FILE = 'brown_cluster_paths'
+CONLL_FILE = 'sentences.conll'
+
+# Use extractor type as either - 'bow', 'nltk_tokenizer', 'brown', 'brown_full', 'dependency_features' or 'kitchen_sink'
+extractor = 'brown_full'
+
+if extractor == 'brown_full':
+    cluster_prefix_length = 8
+elif extractor == 'brown':
+    cluster_prefix_length = 5
 
 
 def manual_relation_extractor():
@@ -83,14 +91,14 @@ def parse_data(train_data, test_data, extractor):
 
                 # Build up a list of unique tokens that occur in the intermediate text
                 # This is needed to create BOW feature vectors
-                if extractor is 'normal':
+                if extractor is 'bow':
                     tokens = intermediate_text.split()
                 # Using the NTLK Sentence Tokenizer
                 elif extractor is 'nltk_tokenizer':
                     intermediate_text = unicode(intermediate_text, errors='replace')
                     tokens = sent_tokenize(intermediate_text)
                 # Using Brown Clusters
-                elif extractor is 'brown':
+                elif extractor is 'brown' or extractor is 'brown_full':
                     tokens = []
                     brown_cluster_dict = get_brown_clusters()
                     words = intermediate_text.split()
@@ -100,18 +108,20 @@ def parse_data(train_data, test_data, extractor):
                 # Using Stanford Dependency Parser
                 elif extractor is 'dependency_features':
                     intermediate_text = unicode(intermediate_text, errors='replace')
-                    dep_parser = StanfordDependencyParser(model_path='/home/nipun/nltk_data/englishPCFG.ser.gz', java_options = '-mx4096m')
+                    # dep_parser = StanfordDependencyParser(model_path='/home/nipun/nltk_data/englishPCFG.ser.gz', java_options = '-mx4096m')
+                    dep_parser = StanfordDependencyParser(model_path='C:/Users/Nipun/Desktop/MS/Sem2/Natural_Language_Processing/Assignments/Assignment3/englishPCFG.ser.gz',
+                                                          java_options='-mx2048m')
                     tokens = dep_parser.raw_parse(intermediate_text)
                     for t in tokens:
                         print t.tree()
                         print " "
                 """ To generate CoNLL file, type the commands:
-                      java -mx150m -cp "stanford-parser-full-2016-10-31/*:" edu.stanford.nlp.parser.lexparser.LexicalizedParser -outputFormat "penn" /home/nipun/nltk_data/englishPCFG.ser.gz intermediate_text >testsent.tree
+                      java -mx150m -cp "../stanford-parser-full-2016-10-31/*:" edu.stanford.nlp.parser.lexparser.LexicalizedParser -outputFormat "penn" /home/nipun/nltk_data/englishPCFG.ser.gz sentence.txt >testsent.tree
 
 java -mx150m -cp "stanford-parser-full-2016-10-31/*:" edu.stanford.nlp.trees.EnglishGrammaticalStructure -treeFile testsent.tree -conllx """
 
                 for t in tokens:
-                    if extractor is not 'brown':
+                    if extractor is not 'brown' or extractor is not 'brown_full':
                         t = t.lower()
                     if t not in all_tokens:
                         all_tokens.append(t)
@@ -139,13 +149,13 @@ def create_feature_vectors(data, all_tokens, extractor):
         feature_vector = [0 for t in all_tokens]
         intermediate_text = instance[4]
 
-        if extractor is 'normal':
+        if extractor is 'bow':
             tokens = intermediate_text.split()
         # Using NLTK Sentence Tokenizer
         elif extractor is 'nltk_tokenizer':
             tokens = sent_tokenize(intermediate_text)
         # Using Brown clusters
-        elif extractor is 'brown':
+        elif extractor is 'brown' or extractor is 'brown_full':
             tokens = []
             brown_cluster_dict = get_brown_clusters()
             words = intermediate_text.split()
@@ -154,12 +164,12 @@ def create_feature_vectors(data, all_tokens, extractor):
                     tokens.append(brown_cluster_dict[word][0:cluster_prefix_length])
         # Using Stanford Dependency Parser
         elif extractor is 'dependency_features':
-            dep_parser = StanfordDependencyParser(model_path='/home/nipun/nltk_data/englishPCFG.ser.gz', java_options = '-mx20000m')
-            tokens = dep_parser.raw_parse(intermediate_text)
+            dep_parser = StanfordDependencyParser(model_path='/home/nipun/nltk_data/englishPCFG.ser.gz', java_options = '-mx2048m')
+            # tokens = dep_parser.raw_parse(intermediate_text)
             
         
         for token in tokens:
-            if extractor is 'brown':
+            if extractor is 'brown' or extractor is 'brown_full':
                 index = all_tokens.index(token)
             else:
                 index = all_tokens.index(token.lower())
@@ -188,8 +198,9 @@ def generate_arff_file(feature_vectors, all_tokens, out_path, extractor):
         # Header info
         f.write("@RELATION institutions\n")
         for i in range(len(all_tokens)):
-            if extractor is 'brown':
-                f.write("@ATTRIBUTE cluster_{} integer\n".format(i))
+            if extractor is 'brown' or extractor is 'brown_full':
+                brown_cluster_dict = get_brown_clusters()
+                f.write("@ATTRIBUTE cluster_{} integer\n".format(all_tokens[i]))
             else:
                 f.write("@ATTRIBUTE token_{} integer\n".format(i))
 
@@ -211,7 +222,29 @@ def generate_arff_file(feature_vectors, all_tokens, out_path, extractor):
             f.write("{" + entry + "}\n")
 
 if __name__ == "__main__":
+    if extractor == 'bow':
+        train_file = 'train_bow.arff'
+        test_file = 'test_bow.arff'
+    elif extractor == 'nltk_tokenizer':
+	train_file = 'train_nltk.arff'
+	test_file = 'test_nltk.arff'
+    elif extractor == 'brown':
+	train_file = 'train_brown.arff'
+	test_file = 'test_brown.arff'
+    elif extractor == 'brown_full':
+	train_file = 'train_brown_full.arff'
+	test_file = 'test_brown_full.arff'
+    elif extractor == 'dependency_features':
+	train_file = 'train_dependency.arff'
+	test_file = 'test_dependency.arff'
+    elif extractor == 'kitchen_sink':
+	train_file = 'train_kitchen_sink.arff'
+	test_file = 'test_kitchen_sink.arff'
+    else:
+        train_file = 'train.arff'
+	test_file = 'test.arff'
+
     data, all_tokens = parse_data(TRAIN_DATA_PATH, TEST_DATA_PATH, extractor)
     feature_vectors = create_feature_vectors(data, all_tokens, extractor)
-    generate_arff_file(feature_vectors[:6000], all_tokens, "train.arff", extractor)
-    generate_arff_file(feature_vectors[6000:], all_tokens, "test.arff", extractor)
+    generate_arff_file(feature_vectors[:6000], all_tokens, train_file, extractor)
+    generate_arff_file(feature_vectors[6000:], all_tokens, test_file, extractor)
