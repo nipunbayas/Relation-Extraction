@@ -15,12 +15,12 @@ BROWN_CLUSTER_FILE = 'brown_cluster_paths'
 CONLL_FILE = 'sentences.conll'
 
 # Use extractor type as either - 'bow', 'nltk_tokenizer', 'brown', 'brown_full', 'dependency_features' or 'kitchen_sink'
-extractor = 'brown_full'
+extractor = 'brown'
 
 if extractor == 'brown_full':
     cluster_prefix_length = 8
 elif extractor == 'brown':
-    cluster_prefix_length = 5
+    cluster_prefix_length = 6
 
 
 def manual_relation_extractor():
@@ -116,9 +116,9 @@ def parse_data(train_data, test_data, extractor):
                         print t.tree()
                         print " "
                 """ To generate CoNLL file, type the commands:
-                      java -mx150m -cp "../stanford-parser-full-2016-10-31/*:" edu.stanford.nlp.parser.lexparser.LexicalizedParser -outputFormat "penn" /home/nipun/nltk_data/englishPCFG.ser.gz sentence.txt >testsent.tree
+                      java -mx2048m -cp "../stanford-parser-full-2016-10-31/*:" edu.stanford.nlp.parser.lexparser.LexicalizedParser -sentences "newline" -maxLength "250" -outputFormat "penn" /home/nipun/nltk_data/englishPCFG.ser.gz sentence.txt >testsent.tree
 
-java -mx150m -cp "stanford-parser-full-2016-10-31/*:" edu.stanford.nlp.trees.EnglishGrammaticalStructure -treeFile testsent.tree -conllx """
+java -mx12048m -cp "../stanford-parser-full-2016-10-31/*:" edu.stanford.nlp.trees.EnglishGrammaticalStructure -treeFile testsent.tree -conllx > sentence.conll"""
 
                 for t in tokens:
                     if extractor is not 'brown' or extractor is not 'brown_full':
@@ -200,7 +200,7 @@ def generate_arff_file(feature_vectors, all_tokens, out_path, extractor):
         for i in range(len(all_tokens)):
             if extractor is 'brown' or extractor is 'brown_full':
                 brown_cluster_dict = get_brown_clusters()
-                f.write("@ATTRIBUTE cluster_{} integer\n".format(all_tokens[i]))
+                f.write("@ATTRIBUTE cluster_{} integer\n".format(i))
             else:
                 f.write("@ATTRIBUTE token_{} integer\n".format(i))
 
