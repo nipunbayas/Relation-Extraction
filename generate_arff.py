@@ -1,13 +1,10 @@
-from nltk.tokenize import sent_tokenize
+from nltk.tokenize import sent_tokenize, wordpunct_tokenize
 from nltk.parse.stanford import StanfordDependencyParser
 
 import os
 
 os.environ['STANFORD_PARSER'] = '/home/nipun/nltk_data'
 os.environ['STANFORD_MODELS'] = '/home/nipun/nltk_data'
-
-# os.environ['STANFORD_PARSER'] = 'C:/Users/Nipun/Desktop/MS/Sem2/Natural_Language_Processing/Assignments/Assignment3/stanford-parser-full-2016-10-31'
-# os.environ['STANFORD_MODELS'] = 'C:/Users/Nipun/Desktop/MS/Sem2/Natural_Language_Processing/Assignments/Assignment3/stanford-parser-full-2016-10-31'
 
 TEST_DATA_PATH = 'test.tsv'
 TRAIN_DATA_PATH = 'train.tsv'
@@ -96,7 +93,7 @@ def parse_data(train_data, test_data, extractor):
                 # Using the NTLK Sentence Tokenizer
                 elif extractor is 'nltk_tokenizer':
                     intermediate_text = unicode(intermediate_text, errors='replace')
-                    tokens = sent_tokenize(intermediate_text)
+                    tokens = wordpunct_tokenize(intermediate_text)
                 # Using Brown Clusters
                 elif extractor is 'brown' or extractor is 'brown_full':
                     tokens = []
@@ -153,7 +150,7 @@ def create_feature_vectors(data, all_tokens, extractor):
             tokens = intermediate_text.split()
         # Using NLTK Sentence Tokenizer
         elif extractor is 'nltk_tokenizer':
-            tokens = sent_tokenize(intermediate_text)
+            tokens = wordpunct_tokenize(intermediate_text)
         # Using Brown clusters
         elif extractor is 'brown' or extractor is 'brown_full':
             tokens = []
