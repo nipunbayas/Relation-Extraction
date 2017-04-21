@@ -1,6 +1,6 @@
 TEST_DATA_PATH = "test.tsv"
 TRAIN_DATA_PATH = "train.tsv"
-OUTPUT_FILE_PATH = "sentence.txt"
+OUTPUT_FILE_PATH = "full_sentences.txt"
 
 if __name__ == "__main__":
 	with open(TRAIN_DATA_PATH) as inputted_file:
@@ -13,13 +13,18 @@ if __name__ == "__main__":
 
 	for line in train_data_lines:
 		sentences = line.split('\t')
-		sentence = sentences[3]
-		words = sentence.split()
-		write_output.write("%s.\n" % sentence)
+		sentence = sentences[2]
+		write_output.write("%s\n" % sentence)
+		#intermediate_sentences = sentence.split(".")
+		#for intermediate_sentence in intermediate_sentences:
+		#	write_output.write("%s\n" % intermediate_sentence)
 		
 	for line in test_data_lines:
 		sentences = line.split('\t')
-		sentence = sentences[3]
-		write_output.write("%s.\n" % sentence)
+		sentence = sentences[2]
+		write_output.write("%s\n" % sentence)
+		#intermediate_sentences = sentence.split(".")
+		#for intermediate_sentence in intermediate_sentences:
+		#	write_output.write("%s\n" % intermediate_sentence)
 		
 	write_output.close()

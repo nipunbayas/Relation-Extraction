@@ -1,7 +1,8 @@
-from nltk.tokenize import sent_tokenize, wordpunct_tokenize
+from nltk.tokenize import sent_tokenize, wordpunct_tokenize, word_tokenize, sent_tokenize
 from nltk.parse.stanford import StanfordDependencyParser
 
 import os
+import nltk
 
 os.environ['STANFORD_PARSER'] = '/home/nipun/nltk_data'
 os.environ['STANFORD_MODELS'] = '/home/nipun/nltk_data'
@@ -12,19 +13,24 @@ BROWN_CLUSTER_FILE = 'brown_cluster_paths'
 CONLL_FILE = 'sentences.conll'
 
 # Use extractor type as either - 'bow', 'nltk_tokenizer', 'brown', 'brown_full', 'dependency_features' or 'kitchen_sink'
-extractor = 'brown'
+extractor = 'kitchen_sink'
 
 if extractor == 'brown_full':
     cluster_prefix_length = 8
-elif extractor == 'brown':
+elif extractor == 'brown' or extractor is 'kitchen_sink':
     cluster_prefix_length = 6
 
+def manual_regex_feature():
+    regex_features = list()
+    with open(TRAIN_DATA_PATH) as inputted_file:
+        lines = inputted_file.read().splitlines()  # read input file
 
-def manual_relation_extractor():
-    true_positives = 0
-    true_negatives = 0
-    false_positives = 0
-    false_negatives = 0
+    for line in lines:
+        sentences = line.split('\t')
+        if sentences[-1] == 'yes':
+            regex_features.append(1)
+        else:
+            regex_features.append(0)
 
     with open(TEST_DATA_PATH) as inputted_file:
         lines = inputted_file.read().splitlines()  # read input file
@@ -32,24 +38,91 @@ def manual_relation_extractor():
     for line in lines:
         sentences = line.split('\t')
         sentence = sentences[2]
+
+        unicode_sentence = unicode(sentence, errors='replace')
+        text = word_tokenize(unicode_sentence)
+        pos_tags_list = pos_tag(text)
+        pos_sentence = ''.join(str(e) for e in pos_tags_list)
+        pos_sentence = pos_sentence.replace('(', ' ')
+        pos_sentence = pos_sentence.replace(')', ' ')
+        pos_sentence = pos_sentence.replace('u\'', ' ')
+        pos_sentence = pos_sentence.replace('\',', ' ')
+        pos_sentence = pos_sentence.replace('  ', ' ')
+       
         gold_standard_result = sentences[-1]
 
-        match = re.search(r'\beducated at\b', sentence, flags=re.IGNORECASE) or \
-                re.search(r'\bgraduated from\b', sentence, flags=re.IGNORECASE) or \
-                re.search(r'\bmatriculated at\b', sentence, flags=re.IGNORECASE) or \
+        match = re.search(r'\bgraduated\b', sentence, flags=re.IGNORECASE) or \
                 re.search(r'\battended\b', sentence, flags=re.IGNORECASE) or \
-                re.search(r'\bstudied at\b', sentence, flags=re.IGNORECASE)
+                re.search(r"'PRP'(\s)+([a-zA-Z0-9\.]+)(\s)+'VBD'(\s)+([a-zA-Z0-9\.]+)(\s)+'IN'", pos_sentence, flags=re.IGNORECASE) or \
+                re.search(r"'NNP'(\s)+([a-zA-Z0-9\.]+)(\s)+'VBD'(\s)+([a-zA-Z0-9\.]+)(\s)+'NNP'", pos_sentence, flags=re.IGNORECASE) or \
+                re.search(r"'NNP'(\s)+([a-zA-Z0-9\.]+)(\s)+'studied'(\s)+([a-zA-Z0-9\.]+)(\s)+'IN'", pos_sentence, flags=re.IGNORECASE)
 
         if match:
-            if gold_standard_result == 'yes':
-                true_positives += 1
-            else:
-                false_positives += 1
+            regex_features.append(1)
         else:
-            if gold_standard_result == 'no':
-                true_negatives += 1
+            regex_features.append(0)
+
+    return regex_features
+
+
+def generate_dependency_features():
+    institution_relation_words = ['graduated', 'studied', 'matriculated', 'attended', 'educated',
+                                          'completed', 'taught', 'received']
+    feature1_list = list()
+    # Feature 1: Check if root word is one of the 'institution_relation_words'
+    # If yes, store yes, else store 'no'
+    words = list()
+    # Feature 2: Find conj_and, prep_as and x_comp in the labels. They generally represent institution relation
+    pos_tag_list = list()
+    feature2_list = list()
+    feature2_int_list = list()
+    # Feature 3: For the root node, count the number of labels for all its children
+    label_list = list()
+    root_list = list()
+    feature3_list = list()
+    label_children = 0
+    feature1 = ""
+
+    with open(CONLL_FILE) as conll_input:
+        for line in conll_input:
+            parse_tree = line.split('\t')
+            if len(parse_tree) != 1:
+                pos_tag = parse_tree[7]
+                if parse_tree[7] == 'root':
+                    root_word = parse_tree[1]
+                    root_word_index = parse_tree[0]
+
+                words.append(parse_tree[1])
+                pos_tag_list.append(parse_tree[3])
+                label_list.append(parse_tree[7])
+                root_list.append(parse_tree[6])                     
             else:
-                false_negatives += 1
+                words = list()
+
+                if root_word in institution_relation_words:
+                    feature1 = 1
+                else:
+                    feature1 = 0
+                feature1_list.append(feature1)
+
+                for label in label_list:
+                    if label == 'conj_and' or label == 'prep_as' or label == 'x_comp':
+                        feature2 = 1
+                        break
+                    else:
+                        feature2 = 0
+
+                feature2_list.append(feature2)
+                
+                count = 0
+                for index in root_list:
+                    if index == root_word_index:
+                        label_children += 1
+                feature3_list.append(label_children)
+                verb_count = 0
+                label_children = 0
+
+    return feature1_list, feature2_list, feature3_list
 
 
 def get_brown_clusters():
@@ -88,40 +161,39 @@ def parse_data(train_data, test_data, extractor):
 
                 # Build up a list of unique tokens that occur in the intermediate text
                 # This is needed to create BOW feature vectors
-                if extractor is 'bow':
+                if extractor is 'bow' or extractor is 'kitchen_sink':
                     tokens = intermediate_text.split()
                 # Using the NTLK Sentence Tokenizer
-                elif extractor is 'nltk_tokenizer':
+                elif extractor is 'nltk_tokenizer' or extractor is 'kitchen_sink':
                     intermediate_text = unicode(intermediate_text, errors='replace')
-                    tokens = wordpunct_tokenize(intermediate_text)
+                    tokenizer = nltk.tokenize.punkt.PunktSentenceTokenizer()
+                    if extractor is 'kitchen_sink':
+                        tokens.append(tokenizer.tokenize(intermediate_text))
+                    else:
+                        tokens = tokenizer.tokenize(intermediate_text)
+                    # tokens = sent_tokenize(intermediate_text)
                 # Using Brown Clusters
-                elif extractor is 'brown' or extractor is 'brown_full':
-                    tokens = []
+                elif extractor is 'brown' or extractor is 'brown_full' or extractor is 'kitchen_sink':
+                    if extractor is not 'kitchen_sink':
+                        tokens = []
                     brown_cluster_dict = get_brown_clusters()
                     words = intermediate_text.split()
                     for word in words:
                         if word in brown_cluster_dict:
                             tokens.append(brown_cluster_dict[word][0:cluster_prefix_length])
-                # Using Stanford Dependency Parser
-                elif extractor is 'dependency_features':
-                    intermediate_text = unicode(intermediate_text, errors='replace')
-                    # dep_parser = StanfordDependencyParser(model_path='/home/nipun/nltk_data/englishPCFG.ser.gz', java_options = '-mx4096m')
-                    dep_parser = StanfordDependencyParser(model_path='C:/Users/Nipun/Desktop/MS/Sem2/Natural_Language_Processing/Assignments/Assignment3/englishPCFG.ser.gz',
-                                                          java_options='-mx2048m')
-                    tokens = dep_parser.raw_parse(intermediate_text)
-                    for t in tokens:
-                        print t.tree()
-                        print " "
+
                 """ To generate CoNLL file, type the commands:
                       java -mx2048m -cp "../stanford-parser-full-2016-10-31/*:" edu.stanford.nlp.parser.lexparser.LexicalizedParser -sentences "newline" -maxLength "250" -outputFormat "penn" /home/nipun/nltk_data/englishPCFG.ser.gz sentence.txt >testsent.tree
 
 java -mx12048m -cp "../stanford-parser-full-2016-10-31/*:" edu.stanford.nlp.trees.EnglishGrammaticalStructure -treeFile testsent.tree -conllx > sentence.conll"""
+                if extractor is not 'dependency_features':
+                    for t in tokens:
+                        if extractor is 'bow' or extractor is 'nltk_tokenizer':
+                            t = t.lower()
+                        
+                        if t not in all_tokens:
+                            all_tokens.append(t)
 
-                for t in tokens:
-                    if extractor is not 'brown' or extractor is not 'brown_full':
-                        t = t.lower()
-                    if t not in all_tokens:
-                        all_tokens.append(t)
                 data.append((person, institution, judgment, snippet, intermediate_text))
     return data, all_tokens
 
@@ -138,47 +210,69 @@ def create_feature_vectors(data, all_tokens, extractor):
     of the person and the first occurrence of the institution).
     This is also where any additional user-defined features can be added.
     """
+        
     feature_vectors = []
+    judgement_list = []
     for instance in data:
         # BOW features
         # Gets the number of occurrences of each token
         # in the intermediate text
         feature_vector = [0 for t in all_tokens]
+        
         intermediate_text = instance[4]
+        judgement_list.append(instance[2])
 
-        if extractor is 'bow':
+        if extractor is 'bow' or extractor is 'kitchen_sink':
             tokens = intermediate_text.split()
         # Using NLTK Sentence Tokenizer
-        elif extractor is 'nltk_tokenizer':
-            tokens = wordpunct_tokenize(intermediate_text)
+        elif extractor is 'nltk_tokenizer' or extractor is 'kitchen_sink':
+            tokenizer = nltk.tokenize.punkt.PunktSentenceTokenizer()
+            if extractor is 'nltk_tokenizer':
+                tokens = tokenizer.tokenize(intermediate_text)
+                # tokens = sent_tokenize(intermediate_text)
+            else:
+                tokens.append(tokenizer.tokenize(intermediate_text))
         # Using Brown clusters
-        elif extractor is 'brown' or extractor is 'brown_full':
-            tokens = []
+        elif extractor is 'brown' or extractor is 'brown_full' or extractor is 'kitchen_sink':
+            if extractor is not 'kitchen_sink':
+                tokens = []
             brown_cluster_dict = get_brown_clusters()
             words = intermediate_text.split()
             for word in words:
                 if word in brown_cluster_dict:
                     tokens.append(brown_cluster_dict[word][0:cluster_prefix_length])
-        # Using Stanford Dependency Parser
-        elif extractor is 'dependency_features':
-            dep_parser = StanfordDependencyParser(model_path='/home/nipun/nltk_data/englishPCFG.ser.gz', java_options = '-mx2048m')
-            # tokens = dep_parser.raw_parse(intermediate_text)
-            
         
-        for token in tokens:
-            if extractor is 'brown' or extractor is 'brown_full':
-                index = all_tokens.index(token)
-            else:
-                index = all_tokens.index(token.lower())
-            feature_vector[index] += 1
+        if extractor is not 'dependency_features':
+            for token in tokens:
+                if extractor is 'brown' or extractor is 'brown_full':
+                    index = all_tokens.index(token)
+                else:
+                    try:
+                        index = all_tokens.index(token.lower())
+                    except:
+                        pass
+                feature_vector[index] += 1
 
-        ### ADD ADDITIONAL FEATURES HERE ###
+            ### ADD ADDITIONAL FEATURES HERE ###
 
-        # Class label
-        judgment = instance[2]
-        feature_vector.append(judgment)
+            # Class label
+            if extractor is not 'kitchen_sink':
+                judgment = instance[2]
+                feature_vector.append(judgment)
 
-        feature_vectors.append(feature_vector)
+            feature_vectors.append(feature_vector)
+
+    if extractor is 'dependency_features' or extractor is 'kitchen_sink':
+        feature1, feature2, feature3 = generate_dependency_features()
+        if extractor is 'dependency_features':
+            feature_vectors = zip(feature1, feature2, feature3, judgement_list)
+        else:
+            feature_vector_ks = zip(feature1, feature2, feature3, judgement_list)
+            for i in range(3):
+                all_tokens.append(0)
+            for i, x in enumerate(feature_vector_ks):
+                feature_vectors[i] += x
+    
     return feature_vectors
 
 
@@ -198,11 +292,22 @@ def generate_arff_file(feature_vectors, all_tokens, out_path, extractor):
             if extractor is 'brown' or extractor is 'brown_full':
                 brown_cluster_dict = get_brown_clusters()
                 f.write("@ATTRIBUTE cluster_{} integer\n".format(i))
-            else:
+            elif extractor is not 'dependency_features' and extractor is not 'kitchen_sink':
                 f.write("@ATTRIBUTE token_{} integer\n".format(i))
+
+        if extractor is 'dependency_features':
+            for i in range(3):
+                f.write("@ATTRIBUTE feature_{} integer\n".format(i))
+
+        if extractor is 'kitchen_sink':
+            for i in range(len(all_tokens)):
+                f.write("@ATTRIBUTE feature_{} integer\n".format(i))
 
         ### SPECIFY ADDITIONAL FEATURES HERE ###
         # For example: f.write("@ATTRIBUTE custom_1 REAL\n")
+        #for i in range(len())
+        #if extractor is 'dependency_features':
+        #        f.write("@ATTRIBUTE feature2_{} integer\n".format(i))
 
         # Classes
         f.write("@ATTRIBUTE class {yes,no}\n")
